@@ -1,0 +1,67 @@
+llm:
+  provider:
+    provider: openai  # Options: openai, anthropic, openrouter, ollama
+    model: gpt-4o     # See providers.py DEFAULT_MODELS for available options
+    temperature: 0.1
+    max_tokens: null
+    api_key: null    # Will use OPENAI_API_KEY env var if not set
+    api_base: null   # Optional, for custom endpoints
+    extra_kwargs: {} # Additional provider-specific settings
+  cache_dir: .cache/llm
+  max_workers: 4
+  batch_size: 10
+
+semgrep:
+  default_rules:
+    - auto
+  max_target_files: 1000
+  timeout: 300
+  jobs: null
+
+analysis:
+  max_file_size: 1000000
+  max_related_files: 10
+  analyze_imports: true
+  analyze_references: true
+  excluded_dirs:
+    - venv
+    - node_modules
+    - .git
+    - __pycache__
+    - build
+    - dist
+    - migrations
+  excluded_files:
+    - "*.pyc"
+    - "*.pyo"
+    - "*.pyd"
+    - "*.so"
+    - "*.dylib"
+    - "*.min.js"
+    - "*.min.css"
+    - "*.map"
+  languages:
+    - python
+    - javascript
+    - typescript
+    - java
+    - ruby
+    - php
+    - go
+    - csharp
+  max_analysis_time: 30
+  cache_analysis: true
+
+rag:
+  persist_dir: .semgrepai/db
+  collection_name: findings
+  distance_metric: cosine
+  embeddings_model: all-MiniLM-L6-v2
+
+report:
+  output_dir: reports
+  formats:
+    - html
+    - json
+    - sarif
+  max_findings_per_page: 50

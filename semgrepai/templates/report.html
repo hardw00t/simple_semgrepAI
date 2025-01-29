@@ -1,0 +1,406 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Semgrep AI Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .finding {
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .finding h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.5em;
+        }
+        .location {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .message {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .code {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+        .validation {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .verdict {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .true-positive {
+            background: #dc3545;
+            color: white;
+        }
+        .false-positive {
+            background: #28a745;
+            color: white;
+        }
+        .needs-review {
+            background: #ffc107;
+            color: black;
+        }
+        .error {
+            background: #6c757d;
+            color: white;
+        }
+        .confidence {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-left: 10px;
+            font-size: 0.9em;
+        }
+        .high {
+            background: #dc3545;
+            color: white;
+        }
+        .medium {
+            background: #ffc107;
+            color: black;
+        }
+        .low {
+            background: #28a745;
+            color: white;
+        }
+        .section {
+            margin: 15px 0;
+            padding: 10px;
+            background: #fff;
+            border-radius: 4px;
+            border-left: 4px solid #6c757d;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .section ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .metadata {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin: 10px 0;
+        }
+        .metadata span {
+            margin-right: 15px;
+        }
+        
+        .impact-assessment, .vulnerability-info, .technical-details {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        
+        .impact-grid, .vuln-grid, .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .impact-item, .vuln-item, .tech-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .label {
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .value {
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #fff;
+        }
+        
+        .value.critical { background: #dc3545; color: white; }
+        .value.high { background: #fd7e14; color: white; }
+        .value.medium { background: #ffc107; color: black; }
+        .value.low { background: #28a745; color: white; }
+        
+        .header-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .risk-score {
+            padding: 5px 10px;
+            border-radius: 4px;
+            background: #6c757d;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .card {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .card-header {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .card-body {
+            padding: 15px;
+        }
+        
+        .list-group {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        
+        .list-group-item {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .list-group-item:last-child {
+            border-bottom: none;
+        }
+        
+        .list-group-numbered {
+            counter-reset: list-item;
+        }
+        
+        .list-group-numbered li {
+            counter-increment: list-item;
+        }
+        
+        .list-group-numbered li::before {
+            content: counter(list-item) ". ";
+        }
+    </style>
+</head>
+<body>
+    <h1>Semgrep AI Security Report</h1>
+    
+    {% for finding in findings %}
+    <div class="finding">
+        <h2>{{ finding.rule_id }}</h2>
+        
+        <div class="metadata">
+            <span><strong>Severity:</strong> {{ finding.severity }}</span>
+            {% if finding.metadata.cwe %}
+            <span><strong>CWE:</strong> {{ finding.metadata.cwe|join(', ') }}</span>
+            {% endif %}
+            {% if finding.metadata.owasp %}
+            <span><strong>OWASP:</strong> {{ finding.metadata.owasp }}</span>
+            {% endif %}
+        </div>
+        
+        <div class="location">
+            <strong>Location:</strong> {{ finding.path }}:{{ finding.line }}
+        </div>
+        
+        <div class="message">
+            <strong>Message:</strong> {{ finding.message }}
+        </div>
+        
+        <div class="code">
+            <strong>Code:</strong>
+            {{ finding.code }}
+        </div>
+        
+        <div class="validation">
+            <div class="header-row">
+                {% if finding.ai_validation.verdict == 'True Positive' %}
+                <span class="verdict true-positive">True Positive</span>
+                {% elif finding.ai_validation.verdict == 'False Positive' %}
+                <span class="verdict false-positive">False Positive</span>
+                {% elif finding.ai_validation.verdict == 'Needs Review' %}
+                <span class="verdict needs-review">Needs Review</span>
+                {% else %}
+                <span class="verdict error">{{ finding.ai_validation.verdict }}</span>
+                {% endif %}
+                
+                {% if finding.ai_validation.confidence >= 0.7 %}
+                <span class="confidence high">High Confidence</span>
+                {% elif finding.ai_validation.confidence >= 0.4 %}
+                <span class="confidence medium">Medium Confidence</span>
+                {% else %}
+                <span class="confidence low">Low Confidence</span>
+                {% endif %}
+                
+                <span class="risk-score">Risk Score: {{ finding.ai_validation.risk_score }}/10</span>
+            </div>
+
+            <div class="impact-assessment">
+                <h3>Impact Assessment</h3>
+                <div class="impact-grid">
+                    <div class="impact-item">
+                        <span class="label">Business Impact:</span>
+                        <span class="value {{ finding.ai_validation.impact.business|lower }}">
+                            {{ finding.ai_validation.impact.business }}
+                        </span>
+                    </div>
+                    <div class="impact-item">
+                        <span class="label">Data Sensitivity:</span>
+                        <span class="value {{ finding.ai_validation.impact.data_sensitivity|lower }}">
+                            {{ finding.ai_validation.impact.data_sensitivity }}
+                        </span>
+                    </div>
+                    <div class="impact-item">
+                        <span class="label">Exploit Likelihood:</span>
+                        <span class="value {{ finding.ai_validation.impact.exploit_likelihood|lower }}">
+                            {{ finding.ai_validation.impact.exploit_likelihood }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="vulnerability-info">
+                <h3>Vulnerability Information</h3>
+                <div class="vuln-grid">
+                    <div class="vuln-item">
+                        <span class="label">Category:</span>
+                        <span class="value">{{ finding.ai_validation.vulnerability.primary }}</span>
+                    </div>
+                    <div class="vuln-item">
+                        <span class="label">Sub-category:</span>
+                        <span class="value">{{ finding.ai_validation.vulnerability.subcategory }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="technical-details">
+                <h3>Technical Details</h3>
+                <div class="tech-grid">
+                    <div class="tech-item">
+                        <span class="label">Language/Framework:</span>
+                        <span class="value">{{ finding.ai_validation.technical.language }}</span>
+                    </div>
+                    <div class="tech-item">
+                        <span class="label">Component:</span>
+                        <span class="value">{{ finding.ai_validation.technical.component }}</span>
+                    </div>
+                    <div class="tech-item">
+                        <span class="label">Scope:</span>
+                        <span class="value">{{ finding.ai_validation.technical.scope }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            {% if finding.ai_validation.justification %}
+            <div class="section">
+                <h3>Justification</h3>
+                <p>{{ finding.ai_validation.justification }}</p>
+            </div>
+            {% endif %}
+            
+            {% if finding.ai_validation.poc %}
+            <div class="card mt-3">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0">Proof of Concept</h5>
+                </div>
+                <div class="card-body">
+                    <pre class="mb-0">{{ finding.ai_validation.poc }}</pre>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if finding.ai_validation.attack_vectors %}
+            <div class="card mt-3">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">Attack Vectors</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                    {% for vector in finding.ai_validation.attack_vectors %}
+                        <li class="list-group-item">{{ vector }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if finding.ai_validation.trigger_steps %}
+            <div class="card mt-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Steps to Trigger</h5>
+                </div>
+                <div class="card-body">
+                    <ol class="list-group list-group-numbered">
+                    {% for step in finding.ai_validation.trigger_steps %}
+                        <li class="list-group-item">{{ step }}</li>
+                    {% endfor %}
+                    </ol>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if finding.ai_validation.recommended_fixes %}
+            <div class="card mt-3">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Recommended Fixes</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                    {% for fix in finding.ai_validation.recommended_fixes %}
+                        <li class="list-group-item">{{ fix }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if finding.ai_validation.notes %}
+            <div class="card mt-3">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Additional Notes</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                    {% for note in finding.ai_validation.notes %}
+                        <li class="list-group-item">{{ note }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</body>
+</html>

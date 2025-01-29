@@ -1,0 +1,49 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  simple:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  rich:
+    '()': 'rich.logging.RichHandler'
+    rich_tracebacks: true
+    markup: true
+    show_time: true
+    show_path: true
+
+handlers:
+  console:
+    class: rich.logging.RichHandler
+    formatter: rich
+    rich_tracebacks: true
+    markup: true
+    show_time: true
+    show_path: true
+    level: INFO
+
+  file:
+    class: logging.FileHandler
+    formatter: simple
+    filename: '.semgrepai/logs/semgrepai.log'
+    mode: 'a'
+    level: DEBUG
+
+loggers:
+  semgrepai:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+
+  semgrepai.validator:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+
+  semgrepai.parallel:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+
+root:
+  level: INFO
+  handlers: [console]
