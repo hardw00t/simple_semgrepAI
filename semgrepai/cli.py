@@ -21,17 +21,26 @@ def scan(
         scanner = SemgrepScanner()
         findings = scanner.scan(target_path, rules_path)
         
-        # Store findings in RAG
-        rag = RAGStore()
-        rag.store_findings(findings)
-        
-        # Validate findings using AI
-        validator = AIValidator()
-        validated_findings = validator.validate_findings(findings)
-        
-        # Generate reports
-        reporter = HTMLReporter()
-        reporter.generate_report(validated_findings, output_dir)
+        # Extract findings from results
+        if 'json' in findings and 'results' in findings['json']:
+            scan_findings = findings['json']['results']
+        else:
+            scan_findings = []
+            
+        if scan_findings:
+            # Store findings in RAG if we have any
+            rag = RAGStore()
+            rag.store_findings(scan_findings)
+            
+            # Validate findings using AI
+            validator = AIValidator()
+            validated_findings = validator.validate_findings(scan_findings)
+            
+            # Generate reports
+            reporter = HTMLReporter()
+            reporter.generate_report(validated_findings, output_dir)
+        else:
+            console.print("[yellow]No findings to analyze[/yellow]")
         
         console.print("[green]✓[/green] Scan completed successfully!")
         

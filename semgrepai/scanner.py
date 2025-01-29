@@ -67,6 +67,8 @@ class SemgrepScanner:
                 try:
                     with open(json_output_file) as f:
                         json_results = json.load(f)
+                        if not json_results.get('results'):
+                            console.print("[yellow]Found 0 potential issues[/yellow]")
                 except json.JSONDecodeError as e:
                     console.print("[red]Error:[/red] Failed to parse JSON output")
                     console.print(f"JSON output file contents:")
