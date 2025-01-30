@@ -65,7 +65,9 @@ class LLMFactory:
 # Common model configurations
 DEFAULT_MODELS = {
     "openai": {
-        "gpt-4o": "Most capable OpenAI model, best for complex tasks",
+        "chatgpt-4o-latest": "Most capable OpenAI model, best for complex tasks",
+        "gpt-4-0125-preview": "Most capable OpenAI model, best for complex tasks",
+        "gpt-4": "Standard GPT-4 model",
         "gpt-3.5-turbo": "Good balance of capability and speed",
     },
     "anthropic": {

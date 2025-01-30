@@ -97,15 +97,17 @@ class SemgrepScanner:
                 console.print(f"  - JSON: {json_output_file}")
                 console.print(f"  - SARIF: {sarif_output_file}")
                 
+                if json_results.get('results'):
+                    console.print(f"\nFound {len(json_results['results'])} potential issues")
+                    return results
+                else:
+                    console.print("\n[yellow]No issues found[/yellow]")
+                    return None
+                
             except subprocess.CalledProcessError as e:
                 console.print(f"[red]Error:[/red] Semgrep scan failed")
                 console.print(e.stderr)
-                raise RuntimeError(f"Semgrep scan failed: {e.stderr}")
-            
-            processed_results = self._process_results(results)
-            console.print(f"\n[green]Found {len(processed_results)} potential issues[/green]")
-            
-            return processed_results
+                raise RuntimeError("Semgrep scan failed") from e
 
     def _extract_code(self, result: Dict) -> str:
         """Extract code snippet with context from a finding."""

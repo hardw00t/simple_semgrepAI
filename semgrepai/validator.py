@@ -24,6 +24,9 @@ from .llm.providers import LLMFactory
 import re
 import random
 
+# Disable tokenizer parallelism warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 load_dotenv()
 console = Console()
 console_lock = Lock()
@@ -201,7 +204,8 @@ class AIValidator:
     def _prepare_finding_context(self, finding: Dict, progress=None, task_id=None) -> Dict:
         """Prepare context for a finding including code snippet and analysis."""
         try:
-            file_path = Path(finding['path'])
+            # Convert path to absolute
+            file_path = Path(finding['path']).resolve()
             line_number = finding.get('line', 0)
             
             # Get code context from analyzer
@@ -216,7 +220,7 @@ class AIValidator:
                     'function_name': context.function_name or 'Not in function',
                     'class_name': context.class_name or 'Not in class',
                     'imports': '\n'.join(context.imports) if context.imports else 'No imports',
-                    'dataflow': self._format_dataflow(context.dataflow),
+                    'dataflow': self._format_dataflow(context.dataflow) if context.dataflow else 'No dataflow information',
                     'references': '\n'.join(
                         f"Line {ref['line']}: {ref['content']}"
                         for ref in context.references
@@ -239,19 +243,20 @@ class AIValidator:
                     'security_patterns': {}
                 })
                 
+            return finding
+                
         except Exception as e:
             logger.error(f"Error preparing finding context: {e}")
             finding.update({
                 'code': 'Error analyzing code',
-                'function_name': 'Error',
-                'class_name': 'Error',
-                'imports': 'Error',
-                'dataflow': 'Error',
-                'references': 'Error',
+                'function_name': 'Unknown',
+                'class_name': 'Unknown',
+                'imports': 'Unknown',
+                'dataflow': 'Unknown',
+                'references': 'Unknown',
                 'security_patterns': {}
             })
-        
-        return finding
+            return finding
 
     def validate_findings(self, findings: List[Dict], progress=None, task_id=None) -> List[Dict]:
         """Validate findings using AI analysis."""
