@@ -49,7 +49,8 @@ class LLMFactory:
         elif config.provider == "openrouter":
             # OpenRouter uses OpenAI's API format
             return ChatOpenAI(
-                model=config.model,
+                model_name=config.model,
+                api_base="https://openrouter.ai/api/v1",
                 **common_kwargs
             )
             
