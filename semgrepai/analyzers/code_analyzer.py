@@ -489,39 +489,75 @@ class CodeAnalyzer:
         """Analyze a variable assignment."""
         for target in node.targets:
             if isinstance(target, ast.Name):
+                var_info = {
+                    'name': target.id,
+                    'line': target.lineno,
+                    'type': None,
+                    'value': None,
+                    'tainted': False,
+                    'source': None
+                }
+                
                 try:
+                    # Try to get literal value
                     value = ast.literal_eval(node.value)
-                    context.variables[target.id] = value
+                    var_info['value'] = value
+                    var_info['type'] = type(value).__name__
                 except (ValueError, SyntaxError):
-                    context.variables[target.id] = ast.unparse(node.value)
+                    # For non-literal values, get the source
+                    var_info['value'] = ast.unparse(node.value)
+                    
+                    # Check if value comes from user input
+                    if isinstance(node.value, ast.Call):
+                        call_source = ast.unparse(node.value.func)
+                        for pattern in self.user_input_patterns['python']:
+                            if re.search(pattern, call_source):
+                                var_info['tainted'] = True
+                                var_info['source'] = call_source
+                                break
+                    
+                    # Check if value depends on other variables
+                    for other_var in context.variables:
+                        if other_var in ast.unparse(node.value):
+                            # Inherit taint status from dependent variables
+                            if context.variables[other_var].get('tainted'):
+                                var_info['tainted'] = True
+                                var_info['source'] = context.variables[other_var].get('source')
+                
+                context.variables[target.id] = var_info
+                
+                # Add to dataflow if tainted
+                if var_info['tainted']:
+                    context.add_dataflow(
+                        'assignment',
+                        f"Tainted variable '{target.id}' from {var_info['source']}",
+                        target.lineno,
+                        variable=target.id,
+                        source=var_info['source']
+                    )
 
     def _analyze_dataflow(self, context: CodeContext, node: ast.Assign):
         """Analyze dataflow for assignments."""
         try:
             for target in node.targets:
                 if isinstance(target, ast.Name):
-                    # Get a readable representation of the value
-                    value_repr = ""
-                    if isinstance(node.value, ast.Call):
-                        value_repr = f"call to {ast.unparse(node.value.func)}"
-                    elif isinstance(node.value, ast.Name):
-                        value_repr = f"variable {node.value.id}"
-                    elif isinstance(node.value, ast.Constant):
-                        value_repr = f"constant {str(node.value.value)}"
-                    else:
-                        value_repr = ast.unparse(node.value)
+                    # Track variable dependencies
+                    deps = set()
+                    for node in ast.walk(node.value):
+                        if isinstance(node, ast.Name):
+                            deps.add(node.id)
                     
-                    flow = {
-                        'type': 'assignment',
-                        'description': f"Variable '{target.id}' assigned from {value_repr}",
-                        'line': node.lineno,
-                        'variable': target.id,
-                        'value': value_repr
-                    }
-                    
-                    context.add_dataflow('assignment', f"Variable '{target.id}' assigned from {value_repr}", node.lineno, variable=target.id, value=value_repr)
+                    # Add dataflow entry for variable dependencies
+                    if deps:
+                        context.add_dataflow(
+                            'dependency',
+                            f"Variable '{target.id}' depends on: {', '.join(deps)}",
+                            target.lineno,
+                            variable=target.id,
+                            dependencies=list(deps)
+                        )
         except Exception as e:
-            logger.debug(f"Error analyzing dataflow for assignment: {e}")
+            logger.error(f"Error analyzing dataflow: {e}")
 
     def _analyze_call_dataflow(self, context: CodeContext, node: ast.Call):
         """Analyze dataflow for function calls."""
