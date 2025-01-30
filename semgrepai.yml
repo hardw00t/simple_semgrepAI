@@ -1,7 +1,7 @@
 llm:
   provider:
-    provider: openai  # Options: openai, anthropic, openrouter, ollama
-    model: gpt-4o     # See providers.py DEFAULT_MODELS for available options
+    provider: ollama  # Options: openai, anthropic, openrouter, ollama
+    model: deepseek-r1:14b     # See providers.py DEFAULT_MODELS for available options
     temperature: 0.1
     max_tokens: null
     api_key: null    # Will use OPENAI_API_KEY env var if not set

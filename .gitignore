@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+reports/
 
 # Virtual Environment
 venv/
@@ -33,7 +34,6 @@ ENV/
 
 # Project specific
 .cache/
-reports/
 .env
 .DS_Store
 .semgrepai/
