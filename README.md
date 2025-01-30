@@ -107,8 +107,8 @@ The tool can be configured through `semgrepai.yml`:
 ```yaml
 llm:
   provider:
-    provider: openai
-    model: gpt-4
+    provider: ollama  # Options: openai, anthropic, openrouter, ollama
+    model: deepseek-r1:14b  # Model to use
     temperature: 0.1
   max_workers: 4
   batch_size: 10
