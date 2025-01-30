@@ -17,12 +17,26 @@ class ValidationMetrics:
     cache_misses: int = 0
     true_positives: int = 0
     false_positives: int = 0
+    needs_review: int = 0
     errors: int = 0
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
     processing_times: List[float] = field(default_factory=list)
     memory_usage: List[float] = field(default_factory=list)
     cpu_usage: List[float] = field(default_factory=list)
+    
+    # Detailed metrics
+    vulnerability_categories: Dict[str, int] = field(default_factory=dict)
+    risk_scores: List[int] = field(default_factory=list)
+    confidence_levels: Dict[str, int] = field(default_factory=dict)
+    business_impact: Dict[str, int] = field(default_factory=dict)
+    data_sensitivity: Dict[str, int] = field(default_factory=dict)
+    exploit_likelihood: Dict[str, int] = field(default_factory=dict)
+    
+    # Performance metrics
+    llm_response_times: List[float] = field(default_factory=list)
+    context_preparation_times: List[float] = field(default_factory=list)
+    parsing_times: List[float] = field(default_factory=list)
     
     @property
     def total_time(self) -> float:
@@ -55,6 +69,22 @@ class ValidationMetrics:
         return (self.true_positives / total) * 100
     
     @property
+    def average_risk_score(self) -> float:
+        """Get average risk score."""
+        if not self.risk_scores:
+            return 0
+        return sum(self.risk_scores) / len(self.risk_scores)
+    
+    @property
+    def performance_breakdown(self) -> Dict[str, float]:
+        """Get average times for different processing stages."""
+        return {
+            'llm_response': sum(self.llm_response_times) / len(self.llm_response_times) if self.llm_response_times else 0,
+            'context_preparation': sum(self.context_preparation_times) / len(self.context_preparation_times) if self.context_preparation_times else 0,
+            'parsing': sum(self.parsing_times) / len(self.parsing_times) if self.parsing_times else 0
+        }
+
+    @property
     def average_memory_usage(self) -> float:
         """Get average memory usage in MB."""
         if not self.memory_usage:
@@ -77,13 +107,21 @@ class ValidationMetrics:
             'cache_misses': self.cache_misses,
             'true_positives': self.true_positives,
             'false_positives': self.false_positives,
+            'needs_review': self.needs_review,
             'errors': self.errors,
             'total_time': self.total_time,
             'average_time_per_finding': self.average_time_per_finding,
             'cache_hit_rate': self.cache_hit_rate,
             'true_positive_rate': self.true_positive_rate,
+            'average_risk_score': self.average_risk_score,
+            'performance_breakdown': self.performance_breakdown,
             'average_memory_usage': self.average_memory_usage,
-            'average_cpu_usage': self.average_cpu_usage
+            'average_cpu_usage': self.average_cpu_usage,
+            'vulnerability_categories': self.vulnerability_categories,
+            'confidence_levels': self.confidence_levels,
+            'business_impact': self.business_impact,
+            'data_sensitivity': self.data_sensitivity,
+            'exploit_likelihood': self.exploit_likelihood
         }
 
 class MetricsCollector:
@@ -120,20 +158,55 @@ class MetricsCollector:
         self._monitor_thread = threading.Thread(target=monitor, daemon=True)
         self._monitor_thread.start()
     
-    def record_finding(self, finding: Dict, processing_time: float):
+    def record_finding(self, finding: Dict, processing_time: float, timing_details: Dict = None):
         """Record metrics for a processed finding."""
         with self._lock:
             self.current_metrics.processed_findings += 1
             self.current_metrics.processing_times.append(processing_time)
             
-            if 'ai_validation' in finding:
-                validation = finding['ai_validation']
-                if validation.get('is_true_positive'):
-                    self.current_metrics.true_positives += 1
-                else:
-                    self.current_metrics.false_positives += 1
-            else:
-                self.current_metrics.errors += 1
+            # Record detailed timing metrics
+            if timing_details:
+                if 'llm_response' in timing_details:
+                    self.current_metrics.llm_response_times.append(timing_details['llm_response'])
+                if 'context_preparation' in timing_details:
+                    self.current_metrics.context_preparation_times.append(timing_details['context_preparation'])
+                if 'parsing' in timing_details:
+                    self.current_metrics.parsing_times.append(timing_details['parsing'])
+            
+            # Record finding details
+            verdict = finding.get('verdict', 'unknown').lower()
+            if verdict == 'true positive':
+                self.current_metrics.true_positives += 1
+            elif verdict == 'false positive':
+                self.current_metrics.false_positives += 1
+            elif verdict == 'needs review':
+                self.current_metrics.needs_review += 1
+            
+            # Record vulnerability category
+            category = finding.get('vulnerability_category', {}).get('primary', 'unknown')
+            self.current_metrics.vulnerability_categories[category] = \
+                self.current_metrics.vulnerability_categories.get(category, 0) + 1
+            
+            # Record risk score
+            if 'risk_score' in finding:
+                self.current_metrics.risk_scores.append(finding['risk_score'])
+            
+            # Record confidence level
+            confidence = finding.get('confidence', 'unknown')
+            self.current_metrics.confidence_levels[confidence] = \
+                self.current_metrics.confidence_levels.get(confidence, 0) + 1
+            
+            # Record impact assessments
+            impact = finding.get('impact_assessment', {})
+            if 'business_impact' in impact:
+                self.current_metrics.business_impact[impact['business_impact']] = \
+                    self.current_metrics.business_impact.get(impact['business_impact'], 0) + 1
+            if 'data_sensitivity' in impact:
+                self.current_metrics.data_sensitivity[impact['data_sensitivity']] = \
+                    self.current_metrics.data_sensitivity.get(impact['data_sensitivity'], 0) + 1
+            if 'exploit_likelihood' in impact:
+                self.current_metrics.exploit_likelihood[impact['exploit_likelihood']] = \
+                    self.current_metrics.exploit_likelihood.get(impact['exploit_likelihood'], 0) + 1
     
     def record_cache_hit(self):
         """Record a cache hit."""

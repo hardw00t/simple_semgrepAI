@@ -580,120 +580,68 @@ class AIValidator:
 
     def _display_validation_statistics(self, total_findings: int, validated_findings: List[Dict], processing_time: float):
         """Display validation statistics in a formatted table."""
+        # Get current metrics
+        metrics = self.metrics.current_metrics  # Access the ValidationMetrics object directly
+        
+        # Create main statistics table
         table = Table(title="Validation Statistics", box=ROUNDED)
-        
-        # Add columns
         table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="magenta")
+        table.add_column("Value", style="green")
         
-        # Basic stats
+        # Basic metrics
         table.add_row("Total Findings", str(total_findings))
         table.add_row("Processing Time", f"{processing_time:.2f} seconds")
-        table.add_row("Average Time per Finding", f"{processing_time/total_findings:.2f} seconds")
-        
-        # Cache stats
-        table.add_row("Cache Hits", str(self.cache.hits))
-        table.add_row("Cache Misses", str(self.cache.misses))
-        if total_findings > 0:
-            table.add_row("Cache Hit Rate", f"{(self.cache.hits/total_findings)*100:.1f}%")
+        table.add_row("Average Time per Finding", f"{metrics.average_time_per_finding:.2f} seconds")
+        table.add_row("Cache Hits", str(metrics.cache_hits))
+        table.add_row("Cache Misses", str(metrics.cache_misses))
+        table.add_row("Cache Hit Rate", f"{metrics.cache_hit_rate:.1f}%")
         
         # Verdict distribution
-        verdict_counts = {
-            'True Positive': 0,
-            'False Positive': 0,
-            'Needs Review': 0,
-            'Error': 0
-        }
-        
-        # Risk score stats
-        risk_scores = []
-        
-        # Impact stats
-        impact_counts = {
-            'business': {'Critical': 0, 'High': 0, 'Medium': 0, 'Low': 0},
-            'data_sensitivity': {'High': 0, 'Medium': 0, 'Low': 0},
-            'exploit_likelihood': {'High': 0, 'Medium': 0, 'Low': 0}
-        }
-        
-        # Vulnerability category stats
-        vuln_categories = {}
-        
-        for finding in validated_findings:
-            validation = finding.get('ai_validation', {})
-            
-            # Count verdicts
-            verdict = validation.get('verdict', 'Error')
-            verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
-            
-            # Collect risk scores
-            risk_score = validation.get('risk_score', 0)
-            if risk_score > 0:
-                risk_scores.append(risk_score)
-            
-            # Count impacts
-            impact = validation.get('impact', {})
-            for impact_type in ['business', 'data_sensitivity', 'exploit_likelihood']:
-                level = impact.get(impact_type, 'Unknown')
-                if level != 'Unknown':
-                    impact_counts[impact_type][level] = impact_counts[impact_type].get(level, 0) + 1
-            
-            # Count vulnerability categories
-            vuln_info = validation.get('vulnerability', {})
-            category = vuln_info.get('primary', 'Unknown')
-            if category != 'Unknown':
-                vuln_categories[category] = vuln_categories.get(category, 0) + 1
-        
-        # Add verdict distribution
         table.add_section()
-        for verdict, count in verdict_counts.items():
-            if count > 0:
-                percentage = (count/total_findings)*100 if total_findings > 0 else 0
-                table.add_row(f"{verdict} Findings", f"{count} ({percentage:.1f}%)")
+        if total_findings > 0:
+            table.add_row("False Positive Findings", f"{metrics.false_positives} ({metrics.false_positives/total_findings*100:.1f}%)")
+            table.add_row("Needs Review Findings", f"{metrics.needs_review} ({metrics.needs_review/total_findings*100:.1f}%)")
+            table.add_row("**True Positive** Findings", f"{metrics.true_positives} ({metrics.true_positives/total_findings*100:.1f}%)")
         
-        # Add risk score statistics
-        if risk_scores:
-            table.add_section()
-            table.add_row("Average Risk Score", f"{sum(risk_scores)/len(risk_scores):.1f}")
-            table.add_row("Highest Risk Score", str(max(risk_scores)))
-            table.add_row("Critical Findings (Risk ≥ 8)", str(len([s for s in risk_scores if s >= 8])))
-        
-        # Add impact statistics
+        # Risk metrics
         table.add_section()
-        table.add_row("Business Impact Distribution", "")
-        for level in ['Critical', 'High', 'Medium', 'Low']:
-            count = impact_counts['business'][level]
-            if count > 0:
-                percentage = (count/total_findings)*100 if total_findings > 0 else 0
-                table.add_row(f"  {level}", f"{count} ({percentage:.1f}%)")
+        table.add_row("Average Risk Score", f"{metrics.average_risk_score:.1f}")
+        table.add_row("Highest Risk Score", str(max(metrics.risk_scores)) if metrics.risk_scores else "N/A")
+        table.add_row("Critical Findings (Risk ≥ 8)", str(len([s for s in metrics.risk_scores if s >= 8])))
         
+        # Performance metrics
+        perf = metrics.performance_breakdown
         table.add_section()
-        table.add_row("Data Sensitivity Distribution", "")
-        for level in ['High', 'Medium', 'Low']:
-            count = impact_counts['data_sensitivity'][level]
-            if count > 0:
-                percentage = (count/total_findings)*100 if total_findings > 0 else 0
-                table.add_row(f"  {level}", f"{count} ({percentage:.1f}%)")
+        table.add_row("LLM Response Time", f"{perf['llm_response']:.2f} seconds")
+        table.add_row("Context Preparation Time", f"{perf['context_preparation']:.2f} seconds")
+        table.add_row("Result Parsing Time", f"{perf['parsing']:.2f} seconds")
         
-        table.add_section()
-        table.add_row("Exploit Likelihood Distribution", "")
-        for level in ['High', 'Medium', 'Low']:
-            count = impact_counts['exploit_likelihood'][level]
-            if count > 0:
-                percentage = (count/total_findings)*100 if total_findings > 0 else 0
-                table.add_row(f"  {level}", f"{count} ({percentage:.1f}%)")
+        console.print(table)
         
-        # Add top vulnerability categories
-        if vuln_categories:
-            table.add_section()
-            table.add_row("Top Vulnerability Categories", "")
-            sorted_categories = sorted(vuln_categories.items(), key=lambda x: x[1], reverse=True)
-            for category, count in sorted_categories[:5]:  # Show top 5
-                percentage = (count/total_findings)*100 if total_findings > 0 else 0
-                table.add_row(f"  {category}", f"{count} ({percentage:.1f}%)")
+        # Create distribution tables
+        self._display_distribution_table("Business Impact Distribution", metrics.business_impact)
+        self._display_distribution_table("Data Sensitivity Distribution", metrics.data_sensitivity)
+        self._display_distribution_table("Exploit Likelihood Distribution", metrics.exploit_likelihood)
+        self._display_distribution_table("Top Vulnerability Categories", 
+                                       dict(sorted(metrics.vulnerability_categories.items(), 
+                                                 key=lambda x: x[1], reverse=True)[:5]))
+    
+    def _display_distribution_table(self, title: str, distribution: Dict[str, int]):
+        """Display a distribution table for a specific metric."""
+        if not distribution:
+            return
+            
+        table = Table(title=title, box=ROUNDED)
+        table.add_column("Category", style="cyan")
+        table.add_column("Count", style="green")
+        table.add_column("Percentage", style="yellow")
         
-        # Print the table
-        with console_lock:
-            console.print(table)
+        total = sum(distribution.values())
+        for category, count in distribution.items():
+            percentage = (count / total) * 100 if total > 0 else 0
+            table.add_row(str(category), str(count), f"{percentage:.1f}%")
+        
+        console.print(table)
 
 class ValidationBatchProcessor:
     def __init__(self, validator, max_workers=None):
