@@ -7,7 +7,22 @@ llm:
     api_key: null    # Will use OPENAI_API_KEY env var if not set
     api_base: null   # Optional, for custom endpoints
     extra_kwargs: {} # Additional provider-specific settings
+
+    # Retry and rate limiting settings (NEW)
+    max_retries: 3   # Number of retries on failure
+    retry_delay: 1.0  # Initial delay between retries (seconds)
+    retry_exponential_backoff: true  # Use exponential backoff for retries
+    max_retry_delay: 60.0  # Maximum delay between retries (seconds)
+    rate_limit_requests_per_minute: null  # Optional: Limit API requests per minute
+    rate_limit_tokens_per_minute: null    # Optional: Limit tokens per minute
+
+    # Cost tracking settings (NEW)
+    enable_cost_tracking: true  # Track API costs and token usage
+    cost_metrics_path: .cache/llm/cost_metrics.json  # Path to save cost metrics
+
   cache_dir: .cache/llm
+  cache_max_entries: 10000  # Maximum cache entries before auto-cleanup (NEW)
+  cache_cleanup_interval: 100  # Trigger cleanup every N cache puts (NEW)
   max_workers: 4
   batch_size: 10
 
