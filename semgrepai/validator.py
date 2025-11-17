@@ -33,24 +33,31 @@ console_lock = Lock()
 logger = get_logger(__name__)
 
 class AIValidator:
-    def __init__(self, config_path=None):
+    def __init__(self, config_path=None, rag_store=None):
         # Load configuration
         self.config_manager = ConfigManager(config_path)
         self.config = self.config_manager.config
-        
-        # Initialize cache
-        self.cache = ValidationCache(self.config.llm.cache_dir)
-        
+
+        # Initialize cache with enhanced features
+        self.cache = ValidationCache(
+            self.config.llm.cache_dir,
+            max_entries=getattr(self.config.llm, 'cache_max_entries', 10000),
+            auto_cleanup_interval=getattr(self.config.llm, 'cache_cleanup_interval', 100)
+        )
+
         # Initialize metrics
         metrics_dir = self.config.llm.cache_dir / "metrics"
         self.metrics = MetricsCollector(metrics_dir)
-        
+
         # Initialize code analyzer
         self.analyzer = CodeAnalyzer(Path.cwd())
-        
-        # Initialize LLM
+
+        # Initialize RAG store for false positive learning
+        self.rag_store = rag_store
+
+        # Initialize LLM with resilience features
         logger.info(f"Initializing LLM with provider: {self.config.llm.provider.provider}, model: {self.config.llm.provider.model}")
-        self.llm = LLMFactory.create_llm(self.config.llm.provider)
+        self.llm = LLMFactory.create_llm(self.config.llm.provider, enable_resilience=True)
         
         self.validation_prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a senior security expert analyzing potential vulnerabilities. Your task is to thoroughly analyze the provided finding and determine if it's a true or false positive.
@@ -118,29 +125,32 @@ class AIValidator:
                 Rule ID: {rule_id}
                 Severity: {severity}
                 Message: {message}
-                
+
                 Code:
                 {code}
-                
+
                 Path: {path}
                 Line: {line}
-                
+
                 Function Context: {function_name}
                 Class Context: {class_name}
                 Imports: {imports}
-                
+
                 Dataflow:
                 {dataflow}
-                
+
                 References:
                 {references}
-                
+
                 Security Patterns:
                 {security_patterns}
-                
+
                 Metadata:
                 {metadata}
-                
+
+                Historical Context:
+                {historical_context}
+
                 Please analyze this finding and provide a detailed security assessment.""")
         ])
         
@@ -363,11 +373,11 @@ class AIValidator:
         """Validate a single finding using the LLM."""
         try:
             start_time = time.time()
-            
+
             # Prepare finding context if not already done
             if 'code' not in finding or not finding['code']:
                 finding = self._prepare_finding_context(finding)
-            
+
             # Ensure required fields exist
             finding.setdefault('function_name', 'Not in function')
             finding.setdefault('class_name', 'Not in class')
@@ -375,7 +385,7 @@ class AIValidator:
             finding.setdefault('dataflow', 'No dataflow found')
             finding.setdefault('references', 'No references found')
             finding.setdefault('security_patterns', {})
-            
+
             # Format metadata for display
             metadata = finding.get('metadata', {})
             formatted_metadata = []
@@ -389,7 +399,25 @@ class AIValidator:
                 formatted_metadata.append(f"Confidence: {metadata['confidence']}")
             if metadata.get('shortlink'):
                 formatted_metadata.append(f"Rule Details: {metadata['shortlink']}")
-            
+
+            # Get historical context from RAG if available
+            historical_context = "No historical data available."
+            if self.rag_store:
+                try:
+                    insights = self.rag_store.get_false_positive_insights(finding)
+                    if insights:
+                        historical_context = f"""
+IMPORTANT: Similar findings have been analyzed before:
+- {insights['similar_false_positives_found']} out of {insights['total_similar_findings']} similar findings were false positives ({insights['false_positive_rate']:.0%})
+- Average similarity: {insights['average_similarity']:.0%}
+- Common reasons for false positives:
+{chr(10).join(f"  • {j[:200]}" for j in insights['common_justifications'])}
+
+{insights['suggestion']}
+"""
+                except Exception as e:
+                    logger.debug(f"Could not retrieve RAG insights: {e}")
+
             # Get AI analysis using the context
             result = self.validation_chain.invoke({
                 'rule_id': finding.get('rule_id', 'Unknown'),
@@ -404,20 +432,28 @@ class AIValidator:
                 'dataflow': finding['dataflow'],
                 'references': finding['references'],
                 'security_patterns': finding['security_patterns'],
-                'metadata': '\n'.join(formatted_metadata)
+                'metadata': '\n'.join(formatted_metadata),
+                'historical_context': historical_context
             })
-            
+
             # Parse the validation result
             validation = self._parse_validation_result(result)
-            
+
+            # Store validation result in RAG for future learning
+            if self.rag_store and validation.get('verdict') != 'Error':
+                try:
+                    self.rag_store.store_validation_result(finding, validation)
+                except Exception as e:
+                    logger.debug(f"Could not store validation in RAG: {e}")
+
             # Record processing time
             end_time = time.time()
             processing_time = end_time - start_time
-            
+
             # Add validation result and metadata to finding
             finding['ai_validation'] = validation
             finding['processing_time'] = processing_time
-            
+
             return finding
             
         except Exception as e:
