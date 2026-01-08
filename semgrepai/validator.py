@@ -1,7 +1,8 @@
-from typing import Dict, List
+from typing import Dict, List, Optional, Callable, Awaitable
 import os
+import asyncio
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv
 from rich.console import Console
@@ -15,6 +16,7 @@ from .parallel import ValidationBatchProcessor
 from .logging import get_logger
 from .metrics import MetricsCollector
 from .analyzers.code_analyzer import CodeAnalyzer, shutdown_flag
+from .async_utils import AsyncRateLimiter, RateLimitConfig, AsyncProgressTracker, ProgressUpdate
 from pathlib import Path
 import signal
 import sys
@@ -666,18 +668,248 @@ IMPORTANT: Similar findings have been analyzed before:
         """Display a distribution table for a specific metric."""
         if not distribution:
             return
-            
+
         table = Table(title=title, box=ROUNDED)
         table.add_column("Category", style="cyan")
         table.add_column("Count", style="green")
         table.add_column("Percentage", style="yellow")
-        
+
         total = sum(distribution.values())
         for category, count in distribution.items():
             percentage = (count / total) * 100 if total > 0 else 0
             table.add_row(str(category), str(count), f"{percentage:.1f}%")
-        
+
         console.print(table)
+
+    # ==================== ASYNC METHODS ====================
+
+    async def validate_findings_async(
+        self,
+        findings: List[Dict],
+        progress_tracker: Optional[AsyncProgressTracker] = None,
+    ) -> List[Dict]:
+        """
+        Validate findings using AI analysis with async processing.
+
+        This method uses asyncio for concurrent LLM calls with rate limiting,
+        providing better performance than the sync ThreadPoolExecutor approach.
+
+        Args:
+            findings: List of findings to validate
+            progress_tracker: Optional async progress tracker for real-time updates
+
+        Returns:
+            List of validated findings with AI analysis
+        """
+        total_findings = len(findings)
+        logger.info(f"Processing {total_findings} findings asynchronously...")
+
+        # Reset cache counters
+        self.cache.hits = 0
+        self.cache.misses = 0
+
+        # Create rate limiter from config
+        rate_config = RateLimitConfig(
+            max_concurrent=self.config.async_config.max_concurrent_requests,
+            requests_per_minute=self.config.async_config.requests_per_minute,
+            max_retries=self.config.async_config.retry_max_attempts,
+            base_delay=self.config.async_config.retry_base_delay,
+            max_delay=self.config.async_config.retry_max_delay,
+            jitter=self.config.async_config.enable_jitter,
+        )
+        rate_limiter = AsyncRateLimiter(rate_config)
+
+        # Create or use provided progress tracker
+        if progress_tracker is None:
+            progress_tracker = AsyncProgressTracker(total_findings)
+
+        await progress_tracker.start()
+
+        validated_findings = []
+        start_time = time.time()
+
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(self.config.async_config.max_concurrent_requests)
+
+        async def process_with_rate_limit(finding: Dict) -> Dict:
+            """Process a single finding with rate limiting."""
+            async with semaphore:
+                try:
+                    # Update progress with current finding
+                    await progress_tracker.update(
+                        current_item={
+                            "rule_id": finding.get("rule_id", "Unknown"),
+                            "path": finding.get("path", "Unknown"),
+                        }
+                    )
+
+                    # Process the finding
+                    result = await self._validate_single_finding_async(finding)
+
+                    # Update metrics based on result
+                    validation = result.get("ai_validation", {})
+                    verdict = validation.get("verdict", "").lower()
+
+                    if "true positive" in verdict:
+                        await progress_tracker.increment_metric("true_positives")
+                    elif "false positive" in verdict:
+                        await progress_tracker.increment_metric("false_positives")
+                    else:
+                        await progress_tracker.increment_metric("needs_review")
+
+                    return result
+
+                except Exception as e:
+                    logger.error(f"Error processing finding: {e}")
+                    await progress_tracker.increment_metric("errors")
+                    # Return original finding with error
+                    finding["ai_validation"] = {
+                        "is_valid": None,
+                        "verdict": "Error",
+                        "justification": f"Error during validation: {str(e)}",
+                    }
+                    return finding
+
+        # Process all findings concurrently
+        tasks = [process_with_rate_limit(finding) for finding in findings]
+
+        # Gather results, updating progress as each completes
+        for coro in asyncio.as_completed(tasks):
+            try:
+                result = await coro
+                validated_findings.append(result)
+                await progress_tracker.update(increment=1)
+            except Exception as e:
+                logger.error(f"Error in async validation: {e}")
+
+        # Complete processing
+        end_time = time.time()
+        processing_time = end_time - start_time
+
+        await progress_tracker.complete()
+
+        logger.info(
+            f"Async validation completed: {len(validated_findings)} findings in {processing_time:.2f}s"
+        )
+
+        return validated_findings
+
+    async def _validate_single_finding_async(self, finding: Dict) -> Dict:
+        """
+        Validate a single finding using the LLM asynchronously.
+
+        Args:
+            finding: The finding to validate
+
+        Returns:
+            The finding with ai_validation field populated
+        """
+        try:
+            start_time = time.time()
+
+            # Prepare finding context if not already done (sync - CPU bound)
+            if "code" not in finding or not finding["code"]:
+                finding = self._prepare_finding_context(finding)
+
+            # Ensure required fields exist
+            finding.setdefault("function_name", "Not in function")
+            finding.setdefault("class_name", "Not in class")
+            finding.setdefault("imports", "No imports")
+            finding.setdefault("dataflow", "No dataflow found")
+            finding.setdefault("references", "No references found")
+            finding.setdefault("security_patterns", {})
+
+            # Format metadata for display
+            metadata = finding.get("metadata", {})
+            formatted_metadata = []
+            if metadata.get("cwe"):
+                formatted_metadata.append(f"CWE: {', '.join(metadata['cwe'])}")
+            if metadata.get("owasp"):
+                formatted_metadata.append(f"OWASP: {metadata['owasp']}")
+            if metadata.get("vulnerability_class"):
+                formatted_metadata.append(
+                    f"Vulnerability: {', '.join(metadata['vulnerability_class'])}"
+                )
+            if metadata.get("confidence"):
+                formatted_metadata.append(f"Confidence: {metadata['confidence']}")
+            if metadata.get("shortlink"):
+                formatted_metadata.append(f"Rule Details: {metadata['shortlink']}")
+
+            # Get AI analysis using async invocation
+            result = await self.validation_chain.ainvoke(
+                {
+                    "rule_id": finding.get("rule_id", "Unknown"),
+                    "severity": finding.get("severity", "Unknown"),
+                    "message": finding.get("message", ""),
+                    "code": finding.get("code", ""),
+                    "path": finding.get("path", ""),
+                    "line": finding.get("line", 0),
+                    "function_name": finding["function_name"],
+                    "class_name": finding["class_name"],
+                    "imports": finding["imports"],
+                    "dataflow": finding["dataflow"],
+                    "references": finding["references"],
+                    "security_patterns": finding["security_patterns"],
+                    "metadata": "\n".join(formatted_metadata),
+                }
+            )
+
+            # Parse the validation result (sync - CPU bound)
+            validation = self._parse_validation_result(result)
+
+            # Record processing time
+            end_time = time.time()
+            processing_time = end_time - start_time
+
+            # Add validation result and metadata to finding
+            finding["ai_validation"] = validation
+            finding["processing_time"] = processing_time
+
+            return finding
+
+        except Exception as e:
+            logger.error(f"Error validating finding async: {e}", exc_info=True)
+            finding["ai_validation"] = {
+                "is_valid": None,
+                "confidence": 0.0,
+                "verdict": "Error",
+                "risk_score": 0,
+                "impact": {
+                    "business": "Unknown",
+                    "data_sensitivity": "Unknown",
+                    "exploit_likelihood": "Unknown",
+                },
+                "vulnerability": {"primary": "Unknown", "subcategory": "Unknown"},
+                "technical": {"language": "Unknown", "component": "Unknown", "scope": "Unknown"},
+                "justification": f"Error during validation: {str(e)}",
+                "poc": "",
+                "attack_vectors": [],
+                "trigger_steps": [],
+                "recommended_fixes": [],
+                "notes": [],
+            }
+            return finding
+
+    def validate_findings_sync(
+        self, findings: List[Dict], progress=None, task_id=None
+    ) -> List[Dict]:
+        """
+        Sync wrapper that runs async validation in an event loop.
+
+        This provides a convenient way to use async validation from sync code.
+        For CLI usage, prefer the original validate_findings() method for
+        better Rich progress display integration.
+
+        Args:
+            findings: List of findings to validate
+            progress: Unused, kept for API compatibility
+            task_id: Unused, kept for API compatibility
+
+        Returns:
+            List of validated findings with AI analysis
+        """
+        return asyncio.run(self.validate_findings_async(findings))
+
 
 class ValidationBatchProcessor:
     def __init__(self, validator, max_workers=None):
