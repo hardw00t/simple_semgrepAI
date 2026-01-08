@@ -4,145 +4,164 @@ An AI-powered code security scanner that combines Semgrep's static analysis with
 
 ## Features
 
-- 🔍 **Advanced Static Analysis**
+- **Advanced Static Analysis**
   - Runs Semgrep scans with default or custom rules
   - Supports multiple programming languages
   - Configurable scan depth and scope
 
-- 🤖 **AI-Powered Validation**
+- **AI-Powered Validation**
   - Uses LLM to validate findings and reduce false positives
   - Provides detailed security analysis for each finding
   - Includes risk scoring and impact assessment
-  - **NEW:** Multi-provider support (OpenAI, Anthropic, Ollama, OpenRouter)
-  - **NEW:** Automatic retry with exponential backoff for failed API calls
-  - **NEW:** Rate limiting to respect API quotas
+  - Multi-provider support (OpenAI, Anthropic, Ollama, OpenRouter)
+  - Automatic retry with exponential backoff for failed API calls
+  - Rate limiting to respect API quotas
 
-- 🎓 **Machine Learning & False Positive Learning**
-  - **NEW:** RAG-based learning from historical validations
-  - **NEW:** Automatic detection of similar false positives
-  - **NEW:** Contextual insights from past findings
-  - **NEW:** Validation history tracking and statistics
+- **Machine Learning & False Positive Learning**
+  - RAG-based learning from historical validations
+  - Automatic detection of similar false positives
+  - Contextual insights from past findings
+  - Validation history tracking and statistics
 
-- 📊 **Comprehensive Reporting**
+- **Web UI Dashboard**
+  - Real-time scan progress with WebSocket updates
+  - Interactive findings table with filtering and sorting
+  - Finding detail panel with AI analysis
+  - Triage workflow (True Positive, False Positive, Needs Review)
+  - Severity distribution visualization
+
+- **Comprehensive Reporting**
   - Generates both JSON and SARIF reports
   - Creates beautiful HTML reports with detailed analysis
   - Includes proof of concept and attack vectors
   - Provides actionable remediation steps
-  - **NEW:** Cost tracking and API usage metrics
-  - **NEW:** Enhanced visualizations with risk distribution
-  - **NEW:** Performance metrics and processing times
-  - **NEW:** Vulnerability category breakdowns
+  - Cost tracking and API usage metrics
+  - Enhanced visualizations with risk distribution
+  - Performance metrics and processing times
+  - Vulnerability category breakdowns
 
-- 💾 **Performance Optimizations**
+- **Performance Optimizations**
   - Caches validation results for faster rescans
-  - **NEW:** Automatic cache size management with LRU eviction
-  - **NEW:** Configurable cache limits and auto-cleanup
-  - Supports parallel processing
-  - Configurable batch sizes and workers
+  - Automatic cache size management with LRU eviction
+  - Configurable cache limits and auto-cleanup
+  - Async processing with configurable workers
+  - Batch processing for large codebases
 
-- 💰 **Cost Management**
-  - **NEW:** Real-time API cost tracking
-  - **NEW:** Token usage monitoring (input/output)
-  - **NEW:** Per-model cost breakdown
-  - **NEW:** Failed and retried request tracking
-  - **NEW:** Cost metrics persistence and reporting
+- **Cost Management**
+  - Real-time API cost tracking
+  - Token usage monitoring (input/output)
+  - Per-model cost breakdown
+  - Failed and retried request tracking
+  - Cost metrics persistence and reporting
 
 ## Installation
 
-1. Clone the repository:
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+ (for Web UI development)
+- Semgrep CLI
+
+### Install from source
+
 ```bash
 git clone https://github.com/hardw00t/simple_semgrepAI.git
 cd simple_semgrepAI
+pip install -e .
 ```
 
-2. Install dependencies:
+### Configure API Keys
+
+Choose your preferred LLM provider:
+
 ```bash
-pip install -r requirements.txt
+# OpenAI
+export OPENAI_API_KEY='your-openai-key'
+
+# Anthropic
+export ANTHROPIC_API_KEY='your-anthropic-key'
+
+# OpenRouter
+export OPENROUTER_API_KEY='your-openrouter-key'
 ```
 
-3. Configure your OpenAI API key:
-```bash
-export OPENAI_API_KEY='your-api-key'
-```
+For local Ollama, no API key is needed - just ensure Ollama is running.
 
 ## Usage
 
-### Basic Scan
+### Web UI (Recommended)
+
+Start the web server:
+
 ```bash
-python -m semgrepai.cli scan /path/to/your/code
+semgrepai server
 ```
 
-### Scan with Custom Rules
+Then open http://localhost:8082 in your browser.
+
+### CLI Scan
+
 ```bash
-python -m semgrepai.cli scan /path/to/your/code --rules-path /path/to/rules.yml
+# Basic scan
+semgrepai scan /path/to/your/code
+
+# Scan with custom rules
+semgrepai scan /path/to/your/code --rules-path /path/to/rules.yml
+
+# Scan with specific output directory
+semgrepai scan /path/to/your/code --output-dir ./reports
 ```
 
 ### Custom Rules
 
-You can add custom rules in two ways:
+Add custom rules in a YAML file:
 
-1. In the configuration file (`semgrepai.yml`):
-```yaml
-semgrep:
-  default_rules:
-    - auto  # Include default rules
-    - rules:  # Add inline custom rules
-        - id: custom-sql-injection
-          pattern: "$DB.execute(\"...\" + $X + \"...\")"
-          message: "SQL injection vulnerability detected"
-          severity: ERROR
-```
-
-2. In a separate rules file:
 ```yaml
 # custom_rules.yml
 rules:
-  - id: custom-xss
-    pattern: "$RES.write(\"...\" + $USER_INPUT + \"...\")"
-    message: "XSS vulnerability detected"
+  - id: custom-sql-injection
+    pattern: "$DB.execute(\"...\" + $X + \"...\")"
+    message: "SQL injection vulnerability detected"
     severity: ERROR
+    languages: [python]
 ```
 
 Then run:
 ```bash
-python -m semgrepai.cli scan /path/to/code --rules-path custom_rules.yml
+semgrepai scan /path/to/code --rules-path custom_rules.yml
 ```
 
 ## Output Files
 
 The tool generates several output files in the `reports` directory:
 
-- `semgrep.json`: Raw Semgrep findings in JSON format
-- `semgrep.sarif`: Raw Semgrep findings in SARIF format
-- `report.json`: Validated findings with AI analysis and comprehensive statistics including:
-  - **NEW:** Cost tracking metrics (API costs, token usage)
-  - **NEW:** Performance metrics (processing time, cache hit rate)
-  - **NEW:** Validation statistics (true/false positives, risk distribution)
-  - Complete findings with AI validations
-- `report.html`: Human-readable report with:
-  - **NEW:** Cost analysis dashboard
-  - **NEW:** Risk distribution charts
-  - **NEW:** Vulnerability category breakdown
-  - **NEW:** Performance metrics visualization
-  - Vulnerability details
-  - Code snippets
-  - Risk assessment
-  - Attack vectors
-  - Remediation steps
+| File | Description |
+|------|-------------|
+| `semgrep.json` | Raw Semgrep findings in JSON format |
+| `semgrep.sarif` | Raw Semgrep findings in SARIF format |
+| `report.json` | Validated findings with AI analysis, cost tracking, performance metrics |
+| `report.html` | Interactive HTML report with visualizations |
+
+The HTML report includes:
+- Cost analysis dashboard
+- Risk distribution charts
+- Vulnerability category breakdown
+- Performance metrics visualization
+- Code snippets and remediation steps
 
 ## Configuration
 
-The tool can be configured through `semgrepai.yml`:
+Create a `semgrepai.yml` file to customize settings:
 
 ```yaml
 llm:
   provider:
     provider: anthropic  # Options: openai, anthropic, openrouter, ollama
-    model: claude-3-5-sonnet-latest
+    model: claude-sonnet-4-5-20241022
     temperature: 0.1
     max_tokens: 8192
 
-    # Retry and rate limiting (NEW)
+    # Retry and rate limiting
     max_retries: 3
     retry_delay: 1.0
     retry_exponential_backoff: true
@@ -150,13 +169,13 @@ llm:
     rate_limit_requests_per_minute: null  # Optional
     rate_limit_tokens_per_minute: null    # Optional
 
-    # Cost tracking (NEW)
+    # Cost tracking
     enable_cost_tracking: true
     cost_metrics_path: .cache/llm/cost_metrics.json
 
   cache_dir: .cache/llm
-  cache_max_entries: 10000  # NEW: Maximum cache entries
-  cache_cleanup_interval: 100  # NEW: Auto-cleanup frequency
+  cache_max_entries: 10000  # Maximum cache entries
+  cache_cleanup_interval: 100  # Auto-cleanup frequency
   max_workers: 4
   batch_size: 10
 
@@ -171,12 +190,69 @@ analysis:
   analyze_imports: true
   analyze_references: true
 
-rag:  # NEW: RAG configuration for learning
+rag:  # RAG configuration for learning
   persist_dir: .semgrepai/db
   collection_name: findings
   distance_metric: cosine
   embeddings_model: all-MiniLM-L6-v2
+
+# Web server settings
+server:
+  host: 127.0.0.1
+  port: 8082
 ```
+
+### LLM Provider Examples
+
+**OpenAI:**
+```yaml
+llm:
+  provider:
+    provider: openai
+    model: gpt-4o
+```
+
+**Anthropic:**
+```yaml
+llm:
+  provider:
+    provider: anthropic
+    model: claude-sonnet-4-5-20241022
+```
+
+**Ollama (Local):**
+```yaml
+llm:
+  provider:
+    provider: ollama
+    model: deepseek-r1:14b
+    base_url: http://localhost:11434
+```
+
+**OpenRouter:**
+```yaml
+llm:
+  provider:
+    provider: openrouter
+    model: anthropic/claude-3.5-sonnet
+    base_url: https://openrouter.ai/api/v1
+```
+
+## Web UI Features
+
+The Web UI provides:
+
+- **Dashboard**: Overview of scans, severity distribution, AI verdicts
+- **Scans List**: Create, view, and manage security scans
+- **Scan Detail**: Real-time progress, findings table, filtering
+- **Finding Panel**: Detailed AI analysis including:
+  - Verdict with confidence score
+  - Risk assessment (1-10)
+  - Impact assessment
+  - Vulnerability classification
+  - Attack vectors and trigger steps
+  - Proof of concept
+  - Recommended fixes
 
 ## Contributing
 
@@ -193,5 +269,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - [Semgrep](https://semgrep.dev/) for their excellent static analysis engine
-- OpenAI for their powerful language models
+- [OpenAI](https://openai.com/) and [Anthropic](https://anthropic.com/) for their powerful language models
+- [React](https://react.dev/) and [Vite](https://vite.dev/) for the frontend framework
 - All our contributors and users
