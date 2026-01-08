@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import logging
 from threading import Lock
+import asyncio
+from contextlib import contextmanager, asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -130,9 +132,31 @@ class MetricsCollector:
         self.metrics_dir.mkdir(parents=True, exist_ok=True)
         self.current_metrics = ValidationMetrics()
         self._lock = Lock()
-        
+        self._async_lock: Optional[asyncio.Lock] = None
+
         # Start resource monitoring
         self._start_resource_monitoring()
+
+    def _get_async_lock(self) -> asyncio.Lock:
+        """Lazily create async lock to avoid event loop issues."""
+        if self._async_lock is None:
+            self._async_lock = asyncio.Lock()
+        return self._async_lock
+
+    @contextmanager
+    def _sync_lock(self):
+        """Context manager for synchronous locking."""
+        self._lock.acquire()
+        try:
+            yield
+        finally:
+            self._lock.release()
+
+    @asynccontextmanager
+    async def _async_lock_ctx(self):
+        """Context manager for asynchronous locking."""
+        async with self._get_async_lock():
+            yield
     
     def _start_resource_monitoring(self):
         """Start monitoring system resources."""
@@ -207,15 +231,79 @@ class MetricsCollector:
             if 'exploit_likelihood' in impact:
                 self.current_metrics.exploit_likelihood[impact['exploit_likelihood']] = \
                     self.current_metrics.exploit_likelihood.get(impact['exploit_likelihood'], 0) + 1
-    
+
+    def _record_finding_internal(self, finding: Dict, processing_time: float, timing_details: Dict = None):
+        """Internal method to record finding metrics (no locking)."""
+        self.current_metrics.processed_findings += 1
+        self.current_metrics.processing_times.append(processing_time)
+
+        # Record detailed timing metrics
+        if timing_details:
+            if 'llm_response' in timing_details:
+                self.current_metrics.llm_response_times.append(timing_details['llm_response'])
+            if 'context_preparation' in timing_details:
+                self.current_metrics.context_preparation_times.append(timing_details['context_preparation'])
+            if 'parsing' in timing_details:
+                self.current_metrics.parsing_times.append(timing_details['parsing'])
+
+        # Record finding details
+        verdict = finding.get('verdict', 'unknown').lower()
+        if verdict == 'true positive':
+            self.current_metrics.true_positives += 1
+        elif verdict == 'false positive':
+            self.current_metrics.false_positives += 1
+        elif verdict == 'needs review':
+            self.current_metrics.needs_review += 1
+
+        # Record vulnerability category
+        category = finding.get('vulnerability_category', {}).get('primary', 'unknown')
+        self.current_metrics.vulnerability_categories[category] = \
+            self.current_metrics.vulnerability_categories.get(category, 0) + 1
+
+        # Record risk score
+        if 'risk_score' in finding:
+            self.current_metrics.risk_scores.append(finding['risk_score'])
+
+        # Record confidence level
+        confidence = finding.get('confidence', 'unknown')
+        self.current_metrics.confidence_levels[confidence] = \
+            self.current_metrics.confidence_levels.get(confidence, 0) + 1
+
+        # Record impact assessments
+        impact = finding.get('impact_assessment', {})
+        if 'business_impact' in impact:
+            self.current_metrics.business_impact[impact['business_impact']] = \
+                self.current_metrics.business_impact.get(impact['business_impact'], 0) + 1
+        if 'data_sensitivity' in impact:
+            self.current_metrics.data_sensitivity[impact['data_sensitivity']] = \
+                self.current_metrics.data_sensitivity.get(impact['data_sensitivity'], 0) + 1
+        if 'exploit_likelihood' in impact:
+            self.current_metrics.exploit_likelihood[impact['exploit_likelihood']] = \
+                self.current_metrics.exploit_likelihood.get(impact['exploit_likelihood'], 0) + 1
+
+    async def record_finding_async(self, finding: Dict, processing_time: float, timing_details: Dict = None):
+        """Record metrics for a processed finding (async version)."""
+        async with self._async_lock_ctx():
+            self._record_finding_internal(finding, processing_time, timing_details)
+
     def record_cache_hit(self):
         """Record a cache hit."""
         with self._lock:
             self.current_metrics.cache_hits += 1
-    
+
+    async def record_cache_hit_async(self):
+        """Record a cache hit (async version)."""
+        async with self._async_lock_ctx():
+            self.current_metrics.cache_hits += 1
+
     def record_cache_miss(self):
         """Record a cache miss."""
         with self._lock:
+            self.current_metrics.cache_misses += 1
+
+    async def record_cache_miss_async(self):
+        """Record a cache miss (async version)."""
+        async with self._async_lock_ctx():
             self.current_metrics.cache_misses += 1
     
     def complete_session(self):
@@ -236,3 +324,42 @@ class MetricsCollector:
         """Get current metrics as dictionary."""
         with self._lock:
             return self.current_metrics.to_dict()
+
+    async def complete_session_async(self):
+        """Complete the current metrics session (async version)."""
+        async with self._async_lock_ctx():
+            self.current_metrics.end_time = time.time()
+
+            # Save metrics to file
+            timestamp = time.strftime('%Y%m%d_%H%M%S')
+            metrics_file = self.metrics_dir / f'metrics_{timestamp}.json'
+
+            with open(metrics_file, 'w') as f:
+                json.dump(self.current_metrics.to_dict(), f, indent=2)
+
+            logger.info(f"Metrics saved to {metrics_file}")
+
+    async def get_current_metrics_async(self) -> Dict:
+        """Get current metrics as dictionary (async version)."""
+        async with self._async_lock_ctx():
+            return self.current_metrics.to_dict()
+
+    def record_error(self):
+        """Record an error during processing."""
+        with self._lock:
+            self.current_metrics.errors += 1
+
+    async def record_error_async(self):
+        """Record an error during processing (async version)."""
+        async with self._async_lock_ctx():
+            self.current_metrics.errors += 1
+
+    def set_total_findings(self, total: int):
+        """Set the total number of findings to process."""
+        with self._lock:
+            self.current_metrics.total_findings = total
+
+    async def set_total_findings_async(self, total: int):
+        """Set the total number of findings to process (async version)."""
+        async with self._async_lock_ctx():
+            self.current_metrics.total_findings = total

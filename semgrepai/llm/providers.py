@@ -326,25 +326,34 @@ class LLMFactory:
 # Common model configurations
 DEFAULT_MODELS = {
     "openai": {
-        "chatgpt-4o-latest": "Most capable OpenAI model, best for complex tasks",
-        "gpt-4-0125-preview": "Most capable OpenAI model, best for complex tasks",
-        "gpt-4": "Standard GPT-4 model",
-        "gpt-3.5-turbo": "Good balance of capability and speed",
+        "gpt-4o": "General purpose model, good balance",
+        "gpt-4.1": "Latest GPT-4 series, 1M context, best for coding",
+        "gpt-4.1-mini": "Cost-effective GPT-4.1, 1M context",
+        "o3": "Advanced reasoning model",
+        "o4-mini": "Fast reasoning, excellent at math/coding",
+        "gpt-5": "Latest flagship model",
+        "gpt-5-mini": "Smaller flagship model",
     },
     "anthropic": {
-        "claude-3-opus": "Most capable Anthropic model",
-        "claude-3-sonnet": "Good balance of capability and speed",
-        "claude-3-haiku": "Fast and efficient",
+        "claude-opus-4-5-20251124": "Most intelligent model, 200k context",
+        "claude-sonnet-4-5-20250929": "Best for coding/agents, 1M context available",
+        "claude-haiku-4-5-20250901": "Fastest, near-frontier performance",
+        "claude-opus-4-1-20250805": "Agentic tasks focused",
+        "claude-sonnet-4-20250522": "Previous gen balanced model",
     },
     "openrouter": {
-        "anthropic/claude-3-opus": "Claude 3 Opus via OpenRouter",
-        "anthropic/claude-3-sonnet": "Claude 3 Sonnet via OpenRouter",
-        "google/gemini-pro": "Google's Gemini Pro via OpenRouter",
+        "anthropic/claude-opus-4-5": "Claude Opus 4.5 via OpenRouter",
+        "anthropic/claude-sonnet-4-5": "Claude Sonnet 4.5 via OpenRouter",
+        "anthropic/claude-haiku-4-5": "Claude Haiku 4.5 via OpenRouter",
+        "openai/gpt-4.1": "GPT-4.1 via OpenRouter",
+        "openai/o3": "o3 reasoning via OpenRouter",
+        "google/gemini-2.0-flash": "Google Gemini 2.0 Flash via OpenRouter",
     },
     "ollama": {
         "mistral:latest": "Open source Mistral model",
-        "llama3.1:latest": "Latest Llama 3.1 model",
+        "llama3.3:latest": "Latest Llama 3.3 model",
         "deepseek-r1:14b": "DeepSeek R1 14b model",
-        "nomic-embed-text:latest": "Nomic text embedding model"
+        "qwen2.5-coder:latest": "Qwen 2.5 coding model",
+        "nomic-embed-text:latest": "Nomic text embedding model",
     }
 }

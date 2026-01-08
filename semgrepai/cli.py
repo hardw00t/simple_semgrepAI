@@ -1,4 +1,5 @@
 import typer
+import asyncio
 from pathlib import Path
 from rich.console import Console
 from typing import Optional
@@ -6,8 +7,13 @@ from .scanner import SemgrepScanner
 from .validator import AIValidator
 from .reporter import HTMLReporter
 from .rag import RAGStore
+from .config import ConfigManager
 
-app = typer.Typer()
+app = typer.Typer(
+    name="semgrepai",
+    help="AI-powered Semgrep vulnerability validator",
+    add_completion=False,
+)
 console = Console()
 
 @app.command()
@@ -128,6 +134,79 @@ def search(
     except Exception as e:
         console.print(f"[red]Error:[/red] {str(e)}")
         raise typer.Exit(1)
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind the server to"),
+    port: int = typer.Option(8080, "--port", "-p", help="Port to bind the server to"),
+    reload: bool = typer.Option(False, "--reload", "-r", help="Enable auto-reload for development"),
+):
+    """Start the SemgrepAI web server with REST API and Web UI."""
+    try:
+        import uvicorn
+
+        console.print(f"[cyan]Starting SemgrepAI web server...[/cyan]")
+        console.print(f"[green]API docs:[/green] http://{host}:{port}/api/docs")
+        console.print(f"[green]Web UI:[/green] http://{host}:{port}/")
+
+        uvicorn.run(
+            "semgrepai.api.main:app",
+            host=host,
+            port=port,
+            reload=reload,
+            log_level="info",
+        )
+    except ImportError:
+        console.print("[red]Error:[/red] uvicorn is not installed. Install it with: pip install uvicorn[standard]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command(name="init-db")
+def init_db():
+    """Initialize the database schema."""
+    try:
+        from .api.db import init_db as _init_db
+
+        console.print("[cyan]Initializing database...[/cyan]")
+        asyncio.run(_init_db())
+        console.print("[green]Database initialized successfully![/green]")
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def config(
+    generate: bool = typer.Option(False, "--generate", "-g", help="Generate a default configuration file"),
+    show: bool = typer.Option(False, "--show", "-s", help="Show current configuration"),
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help="Path for config file"),
+):
+    """Manage SemgrepAI configuration."""
+    try:
+        if generate:
+            output_path = path or Path("semgrepai.yml")
+            ConfigManager.generate_default_config(output_path)
+            console.print(f"[green]Configuration file generated at:[/green] {output_path}")
+        elif show:
+            config_manager = ConfigManager(str(path) if path else None)
+            import yaml
+            console.print(yaml.dump(config_manager.config.model_dump(), default_flow_style=False))
+        else:
+            console.print("Use --generate to create a config file or --show to display current config")
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def version():
+    """Show version information."""
+    console.print("[cyan]SemgrepAI[/cyan] version 0.2.0")
+
 
 if __name__ == "__main__":
     app()

@@ -8,7 +8,7 @@ class LLMConfig(BaseModel):
     provider: LLMProviderConfig = Field(
         default_factory=lambda: LLMProviderConfig(
             provider="openai",
-            model="gpt-4",
+            model="gpt-4.1-mini",
             temperature=0
         )
     )
@@ -68,15 +68,70 @@ class ReportConfig(BaseModel):
     class Config:
         protected_namespaces = ()
 
+
+class AsyncConfig(BaseModel):
+    """Configuration for async processing."""
+    max_concurrent_requests: int = 4
+    """Maximum number of concurrent LLM requests."""
+
+    requests_per_minute: int = 60
+    """Rate limit: maximum requests per minute."""
+
+    retry_max_attempts: int = 3
+    """Maximum number of retry attempts for failed requests."""
+
+    retry_base_delay: float = 1.0
+    """Base delay in seconds for exponential backoff."""
+
+    retry_max_delay: float = 60.0
+    """Maximum delay in seconds for exponential backoff."""
+
+    enable_jitter: bool = True
+    """Add random jitter to retry delays to prevent thundering herd."""
+
+    class Config:
+        protected_namespaces = ()
+
+
+class APIConfig(BaseModel):
+    """Configuration for the web API server."""
+    host: str = "127.0.0.1"
+    """Host to bind the server to."""
+
+    port: int = 8080
+    """Port to bind the server to."""
+
+    cors_origins: List[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"])
+    """Allowed CORS origins for the frontend."""
+
+    db_url: str = "sqlite+aiosqlite:///.semgrepai/semgrepai.db"
+    """Database URL for async SQLAlchemy."""
+
+    secret_key: Optional[str] = None
+    """Secret key for session management. If not set, a random one is generated."""
+
+    debug: bool = False
+    """Enable debug mode with auto-reload."""
+
+    log_level: str = "info"
+    """Logging level for the API server."""
+
+    class Config:
+        protected_namespaces = ()
+
+
 class Config(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     semgrep: SemgrepConfig = Field(default_factory=SemgrepConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
     analysis: CodeAnalysisConfig = Field(default_factory=CodeAnalysisConfig)
+    async_config: AsyncConfig = Field(default_factory=AsyncConfig, alias="async")
+    api: APIConfig = Field(default_factory=APIConfig)
 
     class Config:
         protected_namespaces = ()
+        populate_by_name = True  # Allow using alias 'async' in config files
 
 class ConfigManager:
     DEFAULT_CONFIG_PATHS = [
