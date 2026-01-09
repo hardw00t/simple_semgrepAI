@@ -59,15 +59,49 @@ An AI-powered code security scanner that combines Semgrep's static analysis with
 ### Prerequisites
 
 - Python 3.10+
-- Node.js 18+ (for Web UI development)
+- [UV](https://docs.astral.sh/uv/) package manager (recommended) or pip
+- Node.js 18+ (for Web UI)
 - Semgrep CLI
+
+### Install UV (recommended)
+
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
 ### Install from source
 
 ```bash
 git clone https://github.com/hardw00t/simple_semgrepAI.git
 cd simple_semgrepAI
+
+# Single command installation (Python + Frontend)
+make install
+
+# Or manually with UV
+uv sync --all-extras
+cd semgrepai/web/frontend && npm ci && npm run build
+
+# Or with pip (legacy)
 pip install -e .
+cd semgrepai/web/frontend && npm ci && npm run build
+```
+
+### Development Commands
+
+```bash
+make help           # Show all available commands
+make install        # Install Python + Frontend (single command)
+make dev            # Start development server
+make test           # Run all tests
+make test-unit      # Run fast unit tests only
+make lint           # Run linters
+make format         # Format code
+make clean          # Clean build artifacts
 ```
 
 ### Configure API Keys

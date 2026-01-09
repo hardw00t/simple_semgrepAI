@@ -1,7 +1,10 @@
 """LLM provider configuration and factory."""
-from typing import Optional, Dict, Any, Literal, Callable
+from typing import Optional, Dict, Any, Literal, Callable, List, Iterator
 from pydantic import BaseModel, Field
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk
+from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
@@ -111,18 +114,26 @@ class LLMProviderConfig(BaseModel):
     enable_cost_tracking: bool = True
     cost_metrics_path: Optional[Path] = None
 
-# Model pricing per 1M tokens (input/output)
+# Model pricing per 1M tokens (input/output) - Updated January 2026
 MODEL_PRICING = {
-    "gpt-4o": (5.00, 15.00),
+    # OpenAI models
+    "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini": (0.15, 0.60),
-    "chatgpt-4o-latest": (5.00, 15.00),
-    "gpt-4-0125-preview": (10.00, 30.00),
+    "gpt-4.1": (2.00, 8.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "o3": (10.00, 40.00),
+    "o4-mini": (1.10, 4.40),
+    "gpt-5": (15.00, 60.00),
+    "gpt-5-mini": (5.00, 20.00),
+    # Anthropic Claude 4.x models
+    "claude-opus-4-5-20251101": (15.00, 75.00),
+    "claude-sonnet-4-5-20250514": (3.00, 15.00),
+    "claude-haiku-4-5-20250901": (0.80, 4.00),
+    # Legacy models
     "gpt-4": (30.00, 60.00),
     "gpt-3.5-turbo": (0.50, 1.50),
     "claude-3-5-sonnet-latest": (3.00, 15.00),
-    "claude-3-5-sonnet-20241022": (3.00, 15.00),
     "claude-3-opus": (15.00, 75.00),
-    "claude-3-sonnet": (3.00, 15.00),
     "claude-3-haiku": (0.25, 1.25),
     # OpenRouter and Ollama models are free/self-hosted
     "ollama": (0.0, 0.0),
@@ -139,8 +150,11 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return input_cost + output_cost
 
 
-class ResilientLLMWrapper:
-    """Wrapper that adds retry logic and rate limiting to LLM calls."""
+class ResilientLLMWrapper(Runnable):
+    """Wrapper that adds retry logic and rate limiting to LLM calls.
+
+    Implements the LangChain Runnable interface to work with LCEL chains.
+    """
 
     def __init__(self, llm: BaseChatModel, config: LLMProviderConfig, cost_metrics: Optional[CostMetrics] = None):
         self.llm = llm
@@ -150,6 +164,16 @@ class ResilientLLMWrapper:
         self.tokens_used_this_minute = 0
         self.requests_this_minute = 0
         self.minute_start = time.time()
+
+    @property
+    def InputType(self):
+        """Return the input type for this runnable."""
+        return self.llm.InputType
+
+    @property
+    def OutputType(self):
+        """Return the output type for this runnable."""
+        return self.llm.OutputType
 
     def _check_rate_limits(self, estimated_tokens: int = 1000):
         """Check and enforce rate limits."""
@@ -335,11 +359,9 @@ DEFAULT_MODELS = {
         "gpt-5-mini": "Smaller flagship model",
     },
     "anthropic": {
-        "claude-opus-4-5-20251124": "Most intelligent model, 200k context",
-        "claude-sonnet-4-5-20250929": "Best for coding/agents, 1M context available",
+        "claude-opus-4-5-20251101": "Most intelligent model, 200k context",
+        "claude-sonnet-4-5-20250514": "Best for coding/agents, 1M context available",
         "claude-haiku-4-5-20250901": "Fastest, near-frontier performance",
-        "claude-opus-4-1-20250805": "Agentic tasks focused",
-        "claude-sonnet-4-20250522": "Previous gen balanced model",
     },
     "openrouter": {
         "anthropic/claude-opus-4-5": "Claude Opus 4.5 via OpenRouter",

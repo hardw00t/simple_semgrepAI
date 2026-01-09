@@ -1,0 +1,116 @@
+rules:
+  # SQL Injection - f-string query stored in variable (taint)
+  - id: python-sql-injection-fstring-taint
+    mode: taint
+    pattern-sources:
+      - pattern: f"SELECT ..."
+      - pattern: f"INSERT ..."
+      - pattern: f"UPDATE ..."
+      - pattern: f"DELETE ..."
+    pattern-sinks:
+      - pattern: $CURSOR.execute(...)
+    message: >
+      SQL Injection vulnerability. Query built with f-string is passed to execute.
+      Use parameterized queries: cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021 Injection"
+      category: security
+
+  # SQL Injection - string concatenation query (taint)
+  - id: python-sql-injection-concat
+    mode: taint
+    pattern-sources:
+      - pattern: '"..." + $VAR'
+      - pattern: '"..." + $VAR + "..."'
+    pattern-sinks:
+      - pattern: $CURSOR.execute(...)
+    message: >
+      SQL Injection via string concatenation. Use parameterized queries.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89"
+      category: security
+
+  # SQL Injection - format string query (taint)  
+  - id: python-sql-injection-format
+    mode: taint
+    pattern-sources:
+      - pattern: '"..." % ...'
+      - pattern: '"...".format(...)'
+    pattern-sinks:
+      - pattern: $CURSOR.execute(...)
+    message: >
+      SQL Injection via string formatting. Use parameterized queries.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89"
+      category: security
+
+  # SQL Injection - direct execute with unsafe patterns
+  - id: python-sql-injection-direct
+    pattern-either:
+      - pattern: $CURSOR.execute(f"...")
+      - pattern: $CURSOR.execute("..." + $VAR + "...")
+      - pattern: $CURSOR.execute("..." % ...)
+      - pattern: $CURSOR.execute("...".format(...))
+    message: >
+      SQL Injection vulnerability. Use parameterized queries.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89"
+      category: security
+
+  # XSS - render_template_string with f-string
+  - id: python-flask-xss-template-fstring
+    pattern: render_template_string(f"...")
+    message: >
+      XSS vulnerability. Use render_template with auto-escaping instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021 Injection"
+      category: security
+
+  # XSS - Direct HTML return with f-string
+  - id: python-flask-xss-direct-html
+    pattern-either:
+      - pattern: return f"<html>..."
+      - pattern: return f"<body>..."
+      - pattern: return f"<h1>..."
+      - pattern: return f"<div>..."
+    message: >
+      Potential XSS. User input returned directly in HTML response.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-79"
+      category: security
+
+  # Weak Hash - MD5
+  - id: python-weak-hash-md5
+    pattern: hashlib.md5(...)
+    message: >
+      MD5 is weak. Use SHA-256 or stronger for security operations.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-328"
+      category: security
+
+  # Weak Hash - SHA1
+  - id: python-weak-hash-sha1
+    pattern: hashlib.sha1(...)
+    message: >
+      SHA-1 is weak. Use SHA-256 or stronger for security operations.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-328"
+      category: security

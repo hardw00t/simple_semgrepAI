@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Optional, Dict, List, Set
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from .llm.providers import LLMProviderConfig
 
 class LLMConfig(BaseModel):
@@ -16,8 +16,7 @@ class LLMConfig(BaseModel):
     max_workers: Optional[int] = 4
     batch_size: int = 10
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
 class SemgrepConfig(BaseModel):
     default_rules: List[str] = ["auto"]
@@ -25,8 +24,7 @@ class SemgrepConfig(BaseModel):
     timeout: int = 300
     jobs: Optional[int] = None
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
 class CodeAnalysisConfig(BaseModel):
     max_file_size: int = 1_000_000  # Max file size to analyze in bytes
@@ -48,8 +46,7 @@ class CodeAnalysisConfig(BaseModel):
     max_analysis_time: int = 30  # Maximum time in seconds to spend analyzing a single file
     cache_analysis: bool = True  # Whether to cache analysis results
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
 class RAGConfig(BaseModel):
     persist_dir: Path = Field(default_factory=lambda: Path(".semgrepai/db"))
@@ -57,16 +54,14 @@ class RAGConfig(BaseModel):
     distance_metric: str = "cosine"
     embeddings_model: str = "all-MiniLM-L6-v2"
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
 class ReportConfig(BaseModel):
     output_dir: Path = Field(default_factory=lambda: Path("reports"))
     formats: List[str] = ["html", "json", "sarif"]
     max_findings_per_page: int = 50
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class AsyncConfig(BaseModel):
@@ -89,8 +84,7 @@ class AsyncConfig(BaseModel):
     enable_jitter: bool = True
     """Add random jitter to retry delays to prevent thundering herd."""
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class APIConfig(BaseModel):
@@ -116,8 +110,7 @@ class APIConfig(BaseModel):
     log_level: str = "info"
     """Logging level for the API server."""
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class Config(BaseModel):
@@ -129,9 +122,10 @@ class Config(BaseModel):
     async_config: AsyncConfig = Field(default_factory=AsyncConfig, alias="async")
     api: APIConfig = Field(default_factory=APIConfig)
 
-    class Config:
-        protected_namespaces = ()
-        populate_by_name = True  # Allow using alias 'async' in config files
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        populate_by_name=True  # Allow using alias 'async' in config files
+    )
 
 class ConfigManager:
     DEFAULT_CONFIG_PATHS = [

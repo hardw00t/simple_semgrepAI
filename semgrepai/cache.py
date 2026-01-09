@@ -7,16 +7,21 @@ from datetime import datetime, timedelta
 
 class ValidationCache:
     """Cache for storing validation results to avoid redundant LLM calls."""
-    
-    def __init__(self, cache_dir: Path):
+
+    def __init__(self, cache_dir: Path, max_entries: int = 10000, auto_cleanup_interval: int = 100):
         """Initialize the validation cache.
-        
+
         Args:
             cache_dir: Directory to store cache files
+            max_entries: Maximum number of cache entries (for LRU eviction)
+            auto_cleanup_interval: How often to run cleanup (every N operations)
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_file = self.cache_dir / "validation_cache.json"
+        self.max_entries = max_entries
+        self.auto_cleanup_interval = auto_cleanup_interval
+        self._operation_count = 0
         self._load_cache()
 
     def _load_cache(self):

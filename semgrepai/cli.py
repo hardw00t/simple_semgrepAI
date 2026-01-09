@@ -76,15 +76,22 @@ def scan(
                 # Get validation metrics
                 validation_metrics = None
                 if hasattr(validator, 'metrics') and validator.metrics:
-                    validation_metrics = validator.metrics.get_summary()
+                    validation_metrics = validator.metrics.get_current_metrics()
 
                 # Display cache statistics
-                if hasattr(validator, 'cache'):
-                    cache_stats = validator.cache.get_statistics()
-                    console.print(f"\n[bold green]Cache Performance:[/bold green]")
-                    console.print(f"  Hit Rate: {cache_stats.get('hit_rate', 'N/A')}")
-                    console.print(f"  Total Entries: {cache_stats.get('total_entries', 0)}")
-                    console.print(f"  Capacity: {cache_stats.get('capacity_used', 'N/A')}")
+                if hasattr(validator, 'cache') and validator.cache:
+                    try:
+                        if hasattr(validator.cache, 'get_statistics'):
+                            cache_stats = validator.cache.get_statistics()
+                            console.print(f"\n[bold green]Cache Performance:[/bold green]")
+                            console.print(f"  Hit Rate: {cache_stats.get('hit_rate', 'N/A')}")
+                            console.print(f"  Total Entries: {cache_stats.get('total_entries', 0)}")
+                            console.print(f"  Capacity: {cache_stats.get('capacity_used', 'N/A')}")
+                        elif hasattr(validator.cache, 'cache'):
+                            console.print(f"\n[bold green]Cache Performance:[/bold green]")
+                            console.print(f"  Total Entries: {len(validator.cache.cache)}")
+                    except Exception:
+                        pass  # Cache stats are optional
 
                 # Display RAG statistics if available
                 try:
