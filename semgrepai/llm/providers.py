@@ -299,7 +299,7 @@ class LLMFactory:
         }
 
         if config.api_base:
-            common_kwargs["api_base"] = config.api_base
+            common_kwargs["base_url"] = config.api_base
 
         if config.api_key:
             common_kwargs["api_key"] = config.api_key
@@ -321,7 +321,7 @@ class LLMFactory:
             # OpenRouter uses OpenAI's API format
             base_llm = ChatOpenAI(
                 model_name=config.model,
-                api_base="https://openrouter.ai/api/v1",
+                base_url="https://openrouter.ai/api/v1",
                 **common_kwargs
             )
 
