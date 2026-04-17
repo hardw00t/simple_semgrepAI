@@ -114,7 +114,11 @@ cd semgrepai/web/frontend && npm ci && npm run build
 
 ### Configure API Keys
 
-Choose your preferred LLM provider:
+You can configure the API key in **one of two ways**: via an environment variable or in `semgrepai.yml`. The tool reads env vars automatically when `api_key` is left as `null` in the YAML.
+
+#### Option 1: Environment Variable (recommended)
+
+Pick the variable that matches your provider:
 
 ```bash
 # Anthropic (recommended)
@@ -127,7 +131,37 @@ export OPENAI_API_KEY='your-openai-key'
 export OPENROUTER_API_KEY='your-openrouter-key'
 ```
 
-For local Ollama, no API key is needed - just ensure Ollama is running.
+Notes:
+
+- `export` only lasts for the current shell session. To make it persistent, add the line to your shell's startup file (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc.) and open a new shell or `source` the file.
+- Use straight single quotes `'...'`, not smart quotes `‘...’`. Copy-pasting from rich-text sources (Notion, Slack, web pages, PDFs) can introduce non-ASCII characters that break HTTP header encoding (see [Troubleshooting](#troubleshooting)).
+- Do not include surrounding whitespace, newlines, or `Bearer` prefixes — just the raw key.
+- Verify the value is set correctly before running:
+
+  ```bash
+  echo -n "$ANTHROPIC_API_KEY" | wc -c        # expected length of the key
+  echo -n "$ANTHROPIC_API_KEY" | od -c | head # inspect for hidden bytes
+  ```
+
+- On Windows PowerShell use: `$env:ANTHROPIC_API_KEY = 'your-key'` (or `setx` for persistence).
+
+#### Option 2: `semgrepai.yml`
+
+If environment variables are inconvenient, set the key directly in your config file:
+
+```yaml
+llm:
+  provider:
+    provider: anthropic
+    model: claude-sonnet-4-5-20250514
+    api_key: your-anthropic-key   # or api_base for custom endpoints
+```
+
+Keep `semgrepai.yml` out of version control when it contains a key (add it to `.gitignore`).
+
+#### Ollama (local)
+
+No API key is needed — just ensure the Ollama daemon is running locally.
 
 ## Usage
 
@@ -359,6 +393,29 @@ The tool generates reports in the `reports` directory:
 | `deepseek-r1:14b` | DeepSeek reasoning |
 | `qwen2.5-coder:latest` | Coding focused |
 | `mistral:latest` | Mistral |
+
+## Troubleshooting
+
+### `'ascii' codec can't encode characters in position 0-1: ordinal not in range(128)`
+
+This error is raised by the HTTP client while building the `Authorization` header, which must be pure ASCII. It almost always means the API key in your environment contains non-ASCII bytes (smart quotes, a UTF-8 BOM, a non-breaking space, or trailing newline) introduced during copy-paste.
+
+Fix it by resetting the variable with a clean value:
+
+```bash
+# Inspect the current value for hidden bytes
+echo -n "$ANTHROPIC_API_KEY" | od -c | head
+
+# Re-export using straight single quotes, typed manually if needed
+unset ANTHROPIC_API_KEY
+export ANTHROPIC_API_KEY='sk-ant-...'
+```
+
+If the problem persists, type the key by hand into `semgrepai.yml` under `llm.provider.api_key` — that path avoids shell-level encoding entirely.
+
+### Key works in `semgrepai.yml` but not via environment variable
+
+Same root cause as above: the shell variable was set from a source that injected non-ASCII characters. YAML parsing decodes the value as UTF-8 and the downstream client re-encodes cleanly, so it tends to succeed even when `export` did not. Clean up the env var (see above) or keep using the YAML form.
 
 ## Contributing
 

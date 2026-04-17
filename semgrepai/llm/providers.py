@@ -286,6 +286,27 @@ class ResilientLLMWrapper(Runnable):
         raise last_exception
 
 
+def _clean_api_key(key: str) -> str:
+    """Strip whitespace and verify the API key is pure ASCII.
+
+    HTTP Authorization headers must be ASCII; a non-ASCII key (smart quotes,
+    BOM, non-breaking space, etc. pasted from rich-text sources) surfaces as
+    a cryptic UnicodeEncodeError deep inside httpx.
+    """
+    stripped = key.strip()
+    try:
+        stripped.encode("ascii")
+    except UnicodeEncodeError as e:
+        raise ValueError(
+            "API key contains non-ASCII characters at position "
+            f"{e.start}-{e.end}. This typically happens when the key was "
+            "pasted from a rich-text source that injected smart quotes, a "
+            "BOM, or a non-breaking space. Retype the key or set it via an "
+            "environment variable. See README 'Troubleshooting'."
+        ) from e
+    return stripped
+
+
 class LLMFactory:
     """Factory for creating LLM instances."""
 
@@ -302,7 +323,7 @@ class LLMFactory:
             common_kwargs["base_url"] = config.api_base
 
         if config.api_key:
-            common_kwargs["api_key"] = config.api_key
+            common_kwargs["api_key"] = _clean_api_key(config.api_key)
 
         # Create base LLM
         if config.provider == "openai":
